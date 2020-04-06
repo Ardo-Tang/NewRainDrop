@@ -21,9 +21,9 @@ class Raindrop(object):
         print("Rain drop removal...", end="")
         Y = np.array([i[0] for i in video]) #(frame, rows, cols)
         newY = Y
-        referMap = np.array([Y[i] for i in range(len(Y)) if(i<referFrames)])
+        referMaps = [Y[i] for i in range(len(Y)) if(i<referFrames)]
 
-        meanMap, leftMeanMap = self.__ReferFramesStatistics(referMap, rows, cols)
+        meanMap, leftMeanMap = self.__ReferFramesStatistics(referMaps, rows, cols)
 
         for frame in range(referFrames, end):
             print("\rRain drop removal...", frame, end="")
@@ -31,14 +31,17 @@ class Raindrop(object):
                 for y in range(cols):
                     if(Y[frame, x, y] > meanMap[x, y]):
                         try:
-                            newY[frame, x, y] = int(leftMeanMap[x, y])
+                            newY[frame,x,y] = int(leftMeanMap[x,y,0])
                         except:
                             pass
                     else:
                         pass
-            referMap = np.array([Y[i] for i in range(len(Y)) if((frame-referFrames)<i and i<=frame)])
-            meanMap, leftMeanMap = self.__ReferFramesStatistics(referMap, rows, cols)
+            # 更新(待改進)
+            oldestMap = referMaps.pop(0)
+            referMaps.append(Y[frame])
+            meanMap, leftMeanMap = self.__Refresh(referMaps, meanMap, leftMeanMap, oldestMap, Y[frame], rows, cols)
         
+        # 寫回
         for frame in range(end):
             video[frame] = [newY[frame], video[frame][1], video[frame][2]]
         
@@ -46,7 +49,6 @@ class Raindrop(object):
         print("\rRain drop removal...OK.")
     
     def Exporter(self, outputPath, frames, rows, cols):
-        self.__FolderChecker(outputPath)
         fp = open(outputPath,'wb')
 
         uv_rows = rows//2
@@ -101,16 +103,37 @@ class Raindrop(object):
         print("\rReading...OK.")
         return allFrames #(frame, [Y,U,V], rows, cols)
 
-    def __ReferFramesStatistics(self, inputArray, rows, cols):
+    def __Refresh(self, referMaps, meanMap, leftMeanMap, oldestMap, newestMap, rows, cols):
+        for row in range(rows):
+            for col in range(cols):
+                popInAndOut = (newestMap[row,col]-oldestMap[row,col]) / len(referMaps)
+                if(oldestMap[row,col]>meanMap[row,col]):
+                    if(newestMap[row,col]>meanMap[row,col]):
+                        pass
+                    else:
+                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] + newestMap[row,col]) / (leftMeanMap[row,col,1]+1)
+                        leftMeanMap[row,col,1] = leftMeanMap[row,col,1] + 1
+                else:
+                    if(newestMap[row,col]>meanMap[row,col]):
+                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col]) / (leftMeanMap[row,col,1]-1)
+                        leftMeanMap[row,col,1] = leftMeanMap[row,col,1] - 1
+                    else:
+                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col] + newestMap[row,col]) / leftMeanMap[row,col,1]
+                
+                meanMap[row,col] = meanMap[row,col] + popInAndOut 
+        return meanMap, leftMeanMap
+
+    def __ReferFramesStatistics(self, referMaps, rows, cols):
         meanMap = np.zeros((rows, cols))
-        leftMeanMap = np.zeros((rows, cols))
+        leftMeanMap = np.zeros((rows,cols,2))
 
         for row in range(rows):
             for col in range(cols):
-                temp = np.array([frame[row, col] for frame in inputArray])
+                temp = np.array([frame[row, col] for frame in referMaps])
                 meanMap[row, col] = temp.mean()
-                leftTemp = np.array([frame[row, col] for frame in inputArray if(frame[row, col]<meanMap[row, col])])
-                leftMeanMap[row, col] = leftTemp.mean()
+                leftTemp = np.array([frame[row, col] for frame in referMaps if(frame[row, col]<meanMap[row, col])])
+                leftMeanMap[row,col,0] = leftTemp.mean()
+                leftMeanMap[row,col,1] = len(leftTemp)
 
         return meanMap, leftMeanMap
     
