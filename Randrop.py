@@ -2,6 +2,7 @@ import numpy as np
 import sys
 import os
 import shutil
+import math
 
 class Raindrop(object):
 
@@ -20,11 +21,12 @@ class Raindrop(object):
         
         print("Rain drop removal...", end="")
         Y = np.array([i[0] for i in video]) #(frame, rows, cols)
-        newY = Y
+        newY = np.array(Y)
         referMaps = [Y[i] for i in range(len(Y)) if(i<referFrames)]
 
         meanMap, leftMeanMap = self.__ReferFramesStatistics(referMaps, rows, cols)
-
+        # print(leftMeanMap)
+        # sys.exit()
         for frame in range(referFrames, end):
             print("\rRain drop removal...", frame, end="")
             for x in range(rows):
@@ -33,9 +35,12 @@ class Raindrop(object):
                         try:
                             newY[frame,x,y] = int(leftMeanMap[x,y,0])
                         except:
+                            # print(leftMeanMap[x,y])
                             pass
                     else:
                         pass
+                    # if(Y[frame, x, y]!=newY[frame,x,y]):
+                    #     print(Y[frame, x, y], newY[frame,x,y])
             # 更新(待改進)
             oldestMap = referMaps.pop(0)
             referMaps.append(Y[frame])
@@ -46,9 +51,10 @@ class Raindrop(object):
             video[frame] = [newY[frame], video[frame][1], video[frame][2]]
         
         self.video = video
-        print("\rRain drop removal...OK.")
+        print("\rRain drop removal...OK.             ")
     
     def Exporter(self, outputPath, frames, rows, cols):
+        print("Export...")
         fp = open(outputPath,'wb')
 
         uv_rows = rows//2
@@ -57,12 +63,13 @@ class Raindrop(object):
         for frame in range(frames):
             for row in range(rows):
                 for col in range(cols):
-                    fp.write(bytes(self.video[frame][0][row, col], encoding="utf-8"))
+                    fp.write(np.ubyte(self.video[frame][0][row, col]))
             for uv in range(1, 3):
                 for row in range(uv_rows):
                     for col in range(uv_cols):
-                        fp.write(bytes(self.video[frame][uv][row, col], encoding="utf-8"))
+                        fp.write(np.ubyte(self.video[frame][uv][row, col]))
         fp.close()
+        print("OK.")
 
     def Reader(self, YUVpath, frames, rows, cols):
         print("Reading...", end="")
@@ -100,10 +107,12 @@ class Raindrop(object):
                 allFrames.append([Y, U, V])
 
         fp.close()
-        print("\rReading...OK.")
+        print("\rReading...OK.                    ")
         return allFrames #(frame, [Y,U,V], rows, cols)
 
     def __Refresh(self, referMaps, meanMap, leftMeanMap, oldestMap, newestMap, rows, cols):
+        leftMeanMap_out = leftMeanMap
+        meanMap_out = meanMap
         for row in range(rows):
             for col in range(cols):
                 popInAndOut = (newestMap[row,col]-oldestMap[row,col]) / len(referMaps)
@@ -111,17 +120,33 @@ class Raindrop(object):
                     if(newestMap[row,col]>meanMap[row,col]):
                         pass
                     else:
-                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] + newestMap[row,col]) / (leftMeanMap[row,col,1]+1)
-                        leftMeanMap[row,col,1] = leftMeanMap[row,col,1] + 1
+                        if(math.isnan(leftMeanMap[row,col,0])):
+                            leftMeanMap_out[row,col,0] = (newestMap[row,col]) / 1
+                            leftMeanMap_out[row,col,1] = 1
+                        else:
+                            leftMeanMap_out[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] + newestMap[row,col]) / (leftMeanMap[row,col,1]+1)
+                            leftMeanMap_out[row,col,1] = leftMeanMap[row,col,1] + 1
                 else:
                     if(newestMap[row,col]>meanMap[row,col]):
-                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col]) / (leftMeanMap[row,col,1]-1)
-                        leftMeanMap[row,col,1] = leftMeanMap[row,col,1] - 1
+                        if(math.isnan(leftMeanMap[row,col,0])):
+                            pass
+                        else:
+                            leftMeanMap_out[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col]) / (leftMeanMap[row,col,1]-1)
+                            leftMeanMap_out[row,col,1] = leftMeanMap[row,col,1] - 1
                     else:
-                        leftMeanMap[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col] + newestMap[row,col]) / leftMeanMap[row,col,1]
+                        if(math.isnan(leftMeanMap[row,col,0])):
+                            pass
+                        else:
+                            leftMeanMap_out[row,col,0] = (leftMeanMap[row,col,0]*leftMeanMap[row,col,1] - oldestMap[row,col] + newestMap[row,col]) / leftMeanMap[row,col,1]
                 
-                meanMap[row,col] = meanMap[row,col] + popInAndOut 
-        return meanMap, leftMeanMap
+                meanMap_out[row,col] = meanMap[row,col] + popInAndOut 
+                
+                if(math.isnan(leftMeanMap_out[row,col,0]) and leftMeanMap_out[row,col,1]>1):
+                    print(leftMeanMap_out[row,col])
+                    print(newestMap[row,col])
+                    print(oldestMap[row,col])
+                    sys.exit()
+        return meanMap_out, leftMeanMap_out
 
     def __ReferFramesStatistics(self, referMaps, rows, cols):
         meanMap = np.zeros((rows, cols))
@@ -151,7 +176,9 @@ if __name__ == "__main__":
     cols = 352
     
     raindrop = Raindrop()
-    raindrop.RainDropRemoval(inputPath, frames, rows, cols, referFrames=20)
-    
+    raindrop.RainDropRemoval(inputPath, frames, rows, cols, referFrames=50)
     raindrop.Exporter("./out/out.yuv", frames, rows, cols)
+
+    # raindrop.video = raindrop.Reader(inputPath, 100, rows, cols)
+    # raindrop.Exporter("./out/out.yuv", 100, rows,cols)
 
