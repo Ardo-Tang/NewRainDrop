@@ -13,90 +13,80 @@ import threading
 
 class Raindrop(object):
 
-    def __init__(self, savePath):
-        self.savePath = savePath
+    def __init__(self):
+        self.video = object
 
-    def Statistics(self, YUVpath, frames, rows, cols, seed=8006, points=50):
-        def __hsitogramSaver(inputArray, fileName, arg=[]):
-            histo, _ = np.histogram(inputArray)
-            plt.figure()
-            plt.hist(inputArray)
-            try:
-                _max = max(histo)
-                for i in range(0, 6, 2):
-                    plt.plot([arg[i],arg[i]],[0,_max], "k")
+    def RainDropRemoval(self, YUVpath, frames, rows, cols, referFrames=50):
+        try:
+            start = frames[0]
+            end = frames[1]
+        except:
+            start = 0
+            end = frames
 
-                plt.plot([arg[0]-arg[1],arg[0]-arg[1]], [0,_max], "r")
-                plt.plot([arg[0]+arg[1],arg[0]+arg[1]], [0,_max], "r")
-                plt.plot([arg[2]-arg[3],arg[2]-arg[3]], [0,_max], "g")
-                plt.plot([arg[2]+arg[3],arg[2]+arg[3]], [0,_max], "g")
-                plt.plot([arg[4]-arg[5],arg[4]-arg[5]], [0,_max], "b")
-                plt.plot([arg[4]+arg[5],arg[4]+arg[5]], [0,_max], "b")
-            except:
-                pass
-            plt.savefig(self.savePath+fileName)
-            plt.close()
-            time.sleep(0.01)
+        video = self.Reader(YUVpath, frames, rows, cols)
         
-        def __mean_std(inputArray):
-            meanAll = inputArray.mean()
-            stdAll = inputArray.std()
-            
-            leftData = [i for i in inputArray if(i<=meanAll)]
-            rightData = [i for i in inputArray if(i>meanAll)]
-            leftData = np.array(leftData)
-            rightData = np.array(rightData)
+        print("Rain drop removal...", end="")
+        Y = np.array([i[0] for i in video]) #(frame, rows, cols)
+        newY = Y
+        referMap = np.array([Y[i] for i in range(len(Y)) if(i<referFrames)])
 
-            meanLeft = leftData.mean()
-            stdLeft = leftData.std()
-            meanRight = rightData.mean()
-            stdRight = rightData.std()
-            return [meanAll, stdAll, meanLeft, stdLeft, meanRight, stdRight]
-        # =========================================================================
-        # random.seed(seed)
-        # randomPoints = [(random.randint(0, rows), random.randint(0, cols)) for _ in range(points)]
-        # randomPoints.sort(key=lambda x: x[0])
-        randomPoints = []
-        for row in range(rows):
-            for col in range(cols):
-                randomPoints.append((row, col))
+        meanMap, leftMeanMap = self.__ReferFramesStatistics(referMap, rows, cols)
 
-        statisticsFrames = self.Reader(YUVpath, frames, rows, cols)
-        Y = [i[0] for i in statisticsFrames]
-        Y = np.array(Y) #(frames, rows, cols)
+        for frame in range(referFrames, end):
+            print("\rRain drop removal...", frame, end="")
+            for x in range(rows):
+                for y in range(cols):
+                    if(Y[frame, x, y] > meanMap[x, y]):
+                        try:
+                            newY[frame, x, y] = int(leftMeanMap[x, y])
+                        except:
+                            pass
+                    else:
+                        pass
+            referMap = np.array([Y[i] for i in range(len(Y)) if((frame-referFrames)<i and i<=frame)])
+            meanMap, leftMeanMap = self.__ReferFramesStatistics(referMap, rows, cols)
+        
+        for frame in range(end):
+            video[frame] = [newY[frame], video[frame][1], video[frame][2]]
+        
+        self.video = video
+        print("\rRain drop removal...OK.")
+    
+    def Exporter(self, outputPath, frames, rows, cols):
+        self.__FolderChecker(outputPath)
+        fp = open(outputPath,'wb')
 
-        self.__folderChecker(self.savePath)
+        uv_rows = rows//2
+        uv_cols = cols//2
 
-        csvFile = open(self.savePath+"mean_std.csv", 'w', newline="")
-        csvWriter = csv.writer(csvFile, delimiter=',')
-        csvWriter.writerow(["global mean", "global std", "left hand mean", "left hand std", "right hand mean", "right hand std", "file name(x_y)"])
-        threads = []
-        for randomPoint in range(len(randomPoints)):
-            eachPointY = [i[randomPoints[randomPoint]] for i in Y]
-            eachPointY = np.array(eachPointY)
-
-            # hist,bins = np.histogram(eachPointY, bins=histogramAxis)
-            fileName = "("+str(randomPoints[randomPoint][0])+"_"+str(randomPoints[randomPoint][1])+")"+'.png'
-
-            mean_stdData = __mean_std(eachPointY)
-
-            __hsitogramSaver(eachPointY, fileName, mean_stdData)
-
-            mean_stdData.append(fileName)
-            csvWriter.writerow(mean_stdData)
-
-        csvFile.close()
+        for frame in range(frames):
+            for row in range(rows):
+                for col in range(cols):
+                    fp.write(bytes(self.video[frame][0][row, col], encoding="utf-8"))
+            for uv in range(1, 3):
+                for row in range(uv_rows):
+                    for col in range(uv_cols):
+                        fp.write(bytes(self.video[frame][uv][row, col], encoding="utf-8"))
+        fp.close()
 
     def Reader(self, YUVpath, frames, rows, cols):
+        print("Reading...", end="")
         fp = open(YUVpath,'rb')
 
         uv_rows = rows//2
         uv_cols = cols//2
 
-        allFrames = []
-        start = frames[0]
-        end = frames[1]
+        try:
+            start = frames[0]
+            end = frames[1]
+        except:
+            start = 0
+            end = frames
+
+        allFrames = []        
         for frame in range(end):
+            print("\rReading...", frame, end="")
             if(frame<start):
                 continue
             else:
@@ -116,20 +106,37 @@ class Raindrop(object):
                 allFrames.append([Y, U, V])
 
         fp.close()
-        return allFrames #(frame, 3, rows, cols)
+        print("\rReading...OK.")
+        return allFrames #(frame, [Y,U,V], rows, cols)
+
+    def __ReferFramesStatistics(self, inputArray, rows, cols):
+        meanMap = np.zeros((rows, cols))
+        leftMeanMap = np.zeros((rows, cols))
+
+        for row in range(rows):
+            for col in range(cols):
+                temp = np.array([frame[row, col] for frame in inputArray])
+                meanMap[row, col] = temp.mean()
+                leftTemp = np.array([frame[row, col] for frame in inputArray if(frame[row, col]<meanMap[row, col])])
+                leftMeanMap[row, col] = leftTemp.mean()
+
+        return meanMap, leftMeanMap
     
-    def __folderChecker(self, path):
+    def __FolderChecker(self, path):
         if not(os.path.isdir(path)):
             os.mkdir(path)
         else:
             shutil.rmtree(path)
             os.mkdir(path)
 
-if __name__ == "__main__":
-    filePath = "demo.yuv"
+if __name__ == "__main__":    
+    inputPath = "demo.yuv"
     frames = 753
     rows = 288
     cols = 352
-    raindrop = Raindrop("./out/")
-    raindrop.Statistics(filePath, [0, 50], rows, cols)
+    
+    raindrop = Raindrop()
+    raindrop.RainDropRemoval(inputPath, frames, rows, cols, referFrames=20)
+    
+    raindrop.Exporter("./out/out.yuv", frames, rows, cols)
 
