@@ -28,18 +28,26 @@ class Raindrop(object):
         meanMap, leftMeanMap = self.__ReferFramesStatistics(referMaps, rows, cols)
             
         oldestMap = np.array([])
-        for frame in range(referFrames, end):
+        for frame in range(end):
             print("\rRain drop removal...", frame, end="")
             for x in range(rows):
                 for y in range(cols):
                     if(Y[frame, x, y] > meanMap[x, y]):
-                        newY[frame, x, y] = int(leftMeanMap[x, y, 0])
+                        try:
+                            if(leftMeanMap[x, y, 1] > 1):
+                                # print(leftMeanMap[x, y], meanMap[x, y], oldestMap[x, y], Y[frame, x, y])
+                                newY[frame, x, y] = int(leftMeanMap[x, y, 0])
+                            else:
+                                newY[frame, x, y] = int(meanMap[x, y])
+                        except:
+                            # print(leftMeanMap[x, y], meanMap[x, y], oldestMap[x, y], Y[frame, x, y])
+                            newY[frame, x, y] = int(meanMap[x, y])
             
             # 更新(待改進)
             oldestMap = referMaps.pop(0)
             referMaps.append(Y[frame])
-            meanMap, leftMeanMap = self.__Refresh(
-                referFrames, meanMap, leftMeanMap, oldestMap, Y[frame], rows, cols)
+            meanMap, leftMeanMap = self.__Refresh(referFrames, meanMap, leftMeanMap, oldestMap, Y[frame], rows, cols)
+            # meanMap, leftMeanMap = self.__ReferFramesStatistics(referMaps, rows, cols)
 
         # 寫回
         for frame in range(end):
@@ -117,12 +125,29 @@ class Raindrop(object):
                     if(newestMap[row, col] > meanMap[row, col]):
                         pass
                     else:
-                        pass
+                        if((not np.isnan(leftMeanMap[row, col, 0])) and (not np.isinf(leftMeanMap[row, col, 0]))):
+                            leftMeanMap_out[row, col, 1] += 1
+                            leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1]+newestMap[row, col]) / leftMeanMap_out[row, col, 1]
+                        else:
+                            leftMeanMap_out[row, col, 1] += 1
+                            leftMeanMap_out[row, col, 0] = (newestMap[row, col]) / leftMeanMap_out[row, col, 1]
                 else:
                     if(newestMap[row, col] > meanMap[row, col]):
-                        pass
+                        if((not np.isnan(leftMeanMap[row, col, 0])) and (not np.isinf(leftMeanMap[row, col, 0]))):
+                            if(leftMeanMap[row, col, 1] > 1):
+                                leftMeanMap_out[row, col, 1] -= 1
+                                leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1]-oldestMap[row, col]) / leftMeanMap_out[row, col, 1]
+                            else:
+                                leftMeanMap_out[row, col, 1] = 0
+                                leftMeanMap_out[row, col, 0] = np.nan
+                        else:
+                            leftMeanMap_out[row, col, 1] = 0
+                            leftMeanMap_out[row, col, 0] = np.nan
                     else:
-                        pass
+                        if((not np.isnan(leftMeanMap[row, col, 0])) and (not np.isinf(leftMeanMap[row, col, 0]))):
+                            leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1]+newestMap[row, col]-oldestMap[row, col]) / leftMeanMap_out[row, col, 1]
+                        else:
+                            leftMeanMap_out[row, col, 0] = np.nan
 
                 meanMap_out[row, col] = meanMap[row, col] + popInAndOut
 
@@ -136,7 +161,7 @@ class Raindrop(object):
             for col in range(cols):
                 temp = np.array([frame[row, col] for frame in referMaps])
                 meanMap[row, col] = temp.mean()
-                leftTemp = np.array([frame[row, col] for frame in referMaps if(frame[row, col] < meanMap[row, col])])
+                leftTemp = np.array([frame[row, col] for frame in referMaps if(frame[row, col] <= meanMap[row, col])])
                 leftMeanMap[row, col, 0] = leftTemp.mean()
                 leftMeanMap[row, col, 1] = len(leftTemp)
                 
@@ -152,7 +177,7 @@ class Raindrop(object):
 
 if __name__ == "__main__":
     inputPath = "demo.yuv"
-    frames = 150
+    frames = 150 #753
     rows = 288
     cols = 352
 
