@@ -1,3 +1,4 @@
 *.yuv
-/out/
+/out
 *.exe
+*.xlsx

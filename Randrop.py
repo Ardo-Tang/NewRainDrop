@@ -3,7 +3,7 @@ import sys
 import os
 import shutil
 import math
-
+from matplotlib import pyplot as plt
 
 class Raindrop(object):
 
@@ -25,30 +25,21 @@ class Raindrop(object):
         newY = np.array(Y)
         referMaps = [Y[i] for i in range(len(Y)) if(i < referFrames)]
 
-        meanMap, leftMeanMap = self.__ReferFramesStatistics(
-            referMaps, rows, cols)
-        # print(leftMeanMap)
-        # sys.exit()
+        meanMap, leftMeanMap = self.__ReferFramesStatistics(referMaps, rows, cols)
+            
+        oldestMap = np.array([])
         for frame in range(referFrames, end):
             print("\rRain drop removal...", frame, end="")
             for x in range(rows):
                 for y in range(cols):
                     if(Y[frame, x, y] > meanMap[x, y]):
-                        try:
-                            newY[frame, x, y] = int(leftMeanMap[x, y, 0])
-                            # print("leftMeanMap",int(leftMeanMap[x,y,0]))
-                        except:
-                            # print(leftMeanMap[x,y])
-                            pass
-                    else:
-                        pass
-                    # if(Y[frame, x, y]!=newY[frame,x,y]):
-                    #     print(Y[frame, x, y], newY[frame,x,y])
+                        newY[frame, x, y] = int(leftMeanMap[x, y, 0])
+            
             # 更新(待改進)
             oldestMap = referMaps.pop(0)
             referMaps.append(Y[frame])
             meanMap, leftMeanMap = self.__Refresh(
-                referMaps, meanMap, leftMeanMap, oldestMap, Y[frame], rows, cols)
+                referFrames, meanMap, leftMeanMap, oldestMap, Y[frame], rows, cols)
 
         # 寫回
         for frame in range(end):
@@ -114,51 +105,27 @@ class Raindrop(object):
         print("\rReading...OK.                    ")
         return allFrames  # (frame, [Y,U,V], rows, cols)
 
-    def __Refresh(self, referMaps, meanMap, leftMeanMap, oldestMap, newestMap, rows, cols):
-        # def pixelWiseProcessing(row, col):
-
-        leftMeanMap_out = leftMeanMap
-        meanMap_out = meanMap
+    def __Refresh(self, referFrames, meanMap, leftMeanMap, oldestMap, newestMap, rows, cols):
+        leftMeanMap_out = np.array(leftMeanMap)
+        meanMap_out = np.array(meanMap)
         
         for row in range(rows):
             for col in range(cols):
-                popInAndOut = (newestMap[row, col] -
-                               oldestMap[row, col]) / len(referMaps)
+                popInAndOut = (newestMap[row, col] - oldestMap[row, col]) / referFrames
 
                 if(oldestMap[row, col] > meanMap[row, col]):
                     if(newestMap[row, col] > meanMap[row, col]):
                         pass
                     else:
-                        if(leftMeanMap[row, col, 1] == 0):
-                            leftMeanMap_out[row, col, 1] = leftMeanMap[row, col, 1] + 1
-                            leftMeanMap_out[row, col, 0] = (newestMap[row, col]) / leftMeanMap_out[row, col, 1]
-                        else:
-                            leftMeanMap_out[row, col, 1] = leftMeanMap[row, col, 1] + 1
-                            leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1] + newestMap[row, col]) / leftMeanMap_out[row, col, 1]
-
+                        pass
                 else:
                     if(newestMap[row, col] > meanMap[row, col]):
-                        if(leftMeanMap[row, col, 1] < 1):
-                            leftMeanMap_out[row, col, 1] = leftMeanMap_out[row, col, 1]
-                            leftMeanMap_out[row, col, 0] = meanMap[row, col]
-                        else:
-                            leftMeanMap_out[row, col, 1] = leftMeanMap[row, col, 1] - 1
-                            leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1] - oldestMap[row, col]) / leftMeanMap_out[row, col, 1]
+                        pass
                     else:
-                        if(leftMeanMap[row, col, 1] == 0):
-                            leftMeanMap_out[row, col, 1] = 0
-                            leftMeanMap_out[row, col, 0] = meanMap[row, col]
-                        else:
-                            leftMeanMap_out[row, col, 1] = leftMeanMap[row, col, 1] + 1 - 1
-                            leftMeanMap_out[row, col, 0] = (leftMeanMap[row, col, 0]*leftMeanMap[row, col, 1] - oldestMap[row, col] + newestMap[row, col]) / leftMeanMap_out[row, col, 1]
+                        pass
 
                 meanMap_out[row, col] = meanMap[row, col] + popInAndOut
 
-                # if(math.isnan(leftMeanMap_out[row, col, 0]) or leftMeanMap_out[row, col, 1] == 0):
-                #     print(leftMeanMap_out[row, col])
-                #     print(newestMap[row, col])
-                #     print(oldestMap[row, col])
-                #     sys.exit()
         return meanMap_out, leftMeanMap_out
 
     def __ReferFramesStatistics(self, referMaps, rows, cols):
@@ -169,11 +136,10 @@ class Raindrop(object):
             for col in range(cols):
                 temp = np.array([frame[row, col] for frame in referMaps])
                 meanMap[row, col] = temp.mean()
-                leftTemp = np.array([frame[row, col] for frame in referMaps if(
-                    frame[row, col] < meanMap[row, col])])
+                leftTemp = np.array([frame[row, col] for frame in referMaps if(frame[row, col] < meanMap[row, col])])
                 leftMeanMap[row, col, 0] = leftTemp.mean()
                 leftMeanMap[row, col, 1] = len(leftTemp)
-
+                
         return meanMap, leftMeanMap
 
     def __FolderChecker(self, path):
@@ -186,7 +152,7 @@ class Raindrop(object):
 
 if __name__ == "__main__":
     inputPath = "demo.yuv"
-    frames = 753
+    frames = 150
     rows = 288
     cols = 352
 
