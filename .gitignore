@@ -1,4 +1,5 @@
 *.yuv
 /out
-*.exe
+yuvdisplay.exe
 *.xlsx
+/dataset
